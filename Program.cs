@@ -13,6 +13,7 @@ builder.Services.Configure<DatabaseConfiguration>(
 
 // Add application services
 builder.Services.AddScoped<IFileReaderService, FileReaderService>();
+builder.Services.AddSingleton<IKernelMemoryService, KernelMemoryService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
