@@ -11,13 +11,13 @@ Minimal Semantic Kernel POC repository - initial state, ready for implementation
 ## Configuration
 Claude Code settings configured in `.claude/settings.local.json`
 
-## Workflow Rules
-- All requirements start in plan mode for discussion
-- Auto-select appropriate sub-agents for planning and coding tasks
-- Create TODO.md to manage tasks with priorities (exclude from git via .gitignore)
-- TODO includes detailed requirements and specifications for each task
-- Delete completed tasks from TODO.md to minimize token consumption
-- Minimize design complexity to meet task requirements only
-- Execute one task at a time with user confirmation
-- Self-test and verify completion against task requirements
-- Create new branch for each task with meaningful commits and PR descriptions
+## Workflow Rules (STRICT ENFORCEMENT)
+- **Planning**: All requirements start in plan mode for discussion
+- **Task Management**: Use TODO.md to track tasks (excluded from git)
+- **One Task Rule**: Execute ONE task at a time with user confirmation
+- **Branch Management**: 
+  1. Switch to main branch and pull latest changes before new task
+  2. Create new branch per task: `task/t{number}-{description}`  
+  3. Meaningful commits with PR descriptions
+- **Testing**: Self-test and verify completion against requirements
+- **Design**: Minimize complexity - meet requirements only
