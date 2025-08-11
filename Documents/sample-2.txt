@@ -1,0 +1,25 @@
+AI Chatbot Best Practices
+
+When building AI chatbots, consider these important practices:
+
+1. Context Management
+   - Keep conversations focused and relevant
+   - Implement proper memory mechanisms
+   - Handle context window limitations
+
+2. User Experience
+   - Provide clear and helpful responses
+   - Handle errors gracefully
+   - Maintain conversation history
+
+3. Security
+   - Validate all user inputs
+   - Implement rate limiting
+   - Protect sensitive information
+
+4. Performance
+   - Cache frequently used data
+   - Optimize API calls
+   - Monitor response times
+
+This knowledge helps create better chatbot experiences.
