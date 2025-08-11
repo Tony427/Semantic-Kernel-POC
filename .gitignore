@@ -351,5 +351,10 @@ FodyWeavers.xsd
 # TODO.md for task management
 TODO.md
 
+# Local development settings (keep appsettings.json for default config)
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
+
 # Claude Code settings
 .claude/
