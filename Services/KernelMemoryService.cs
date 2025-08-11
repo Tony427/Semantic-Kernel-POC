@@ -165,4 +165,54 @@ public class KernelMemoryService : IKernelMemoryService
             return 0;
         }
     }
+
+    public async Task<IEnumerable<SearchResult>> SearchDocumentsAsync(string query, int limit = 3, double minRelevance = 0.7)
+    {
+        await InitializeAsync();
+
+        try
+        {
+            _logger.LogDebug("Searching documents for: {Query} with relevance >= {MinRelevance}", query, minRelevance);
+
+            var searchResult = await _memory.SearchAsync(
+                query: query,
+                limit: limit,
+                minRelevance: minRelevance);
+
+            var results = searchResult.Results.Select(result => new SearchResult(
+                SourceFile: result.SourceName ?? "Unknown",
+                Content: result.Partitions.FirstOrDefault()?.Text ?? "No content",
+                Relevance: result.Partitions.FirstOrDefault()?.Relevance ?? 0.0
+            )).ToList();
+
+            _logger.LogDebug("Found {ResultCount} relevant documents for query: {Query}", results.Count, query);
+            
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to search documents for query: {Query}", query);
+            return Enumerable.Empty<SearchResult>();
+        }
+    }
+
+    public async Task<MemoryStatus> GetMemoryStatusAsync()
+    {
+        try
+        {
+            var documentCount = await GetDocumentCountAsync();
+            var documents = await _fileReaderService.GetDocumentsAsync();
+            var lastUpdated = documents.Any() ? documents.Max(d => d.LastModified) : (DateTime?)null;
+
+            return new MemoryStatus(
+                IsInitialized: _isInitialized,
+                DocumentsIndexed: documentCount,
+                LastUpdated: lastUpdated);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get memory status");
+            return new MemoryStatus(false, 0, null);
+        }
+    }
 }

@@ -25,6 +25,11 @@ public class FileReaderService : IFileReaderService
         return _cachedDocuments.AsReadOnly();
     }
 
+    public async Task<IEnumerable<DocumentModel>> GetDocumentsAsync()
+    {
+        return await GetAllDocumentsAsync();
+    }
+
     public async Task<DocumentModel?> GetDocumentByFileNameAsync(string fileName)
     {
         await RefreshIfNeededAsync();
