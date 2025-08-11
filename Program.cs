@@ -13,12 +13,25 @@ builder.Services.Configure<DatabaseConfiguration>(
 
 // Add application services
 builder.Services.AddScoped<IFileReaderService, FileReaderService>();
-builder.Services.AddSingleton<IKernelMemoryService, KernelMemoryService>();
+builder.Services.AddScoped<IChatHistoryService, ChatHistoryService>();
+builder.Services.AddScoped<IKernelMemoryService, KernelMemoryService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+
+// Add Swagger services
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo 
+    { 
+        Title = "Semantic Kernel Chat Bot API", 
+        Version = "v1",
+        Description = "API for chat bot powered by Semantic Kernel with persistent chat history and document memory"
+    });
+});
 
 var app = builder.Build();
 
@@ -26,6 +39,12 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Semantic Kernel Chat Bot API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
 
 app.UseHttpsRedirection();
