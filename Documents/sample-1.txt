@@ -1,0 +1,11 @@
+Semantic Kernel Introduction
+
+Semantic Kernel is an open-source SDK that lets you easily combine AI services like OpenAI, Azure OpenAI, and Hugging Face with conventional programming languages like C#, Python, and Java.
+
+Key features:
+- Kernel functions that can be chained together
+- Memory and embeddings support
+- Plugin architecture for extensibility
+- Prompt templating and management
+
+This document serves as basic context for the AI chatbot to understand Semantic Kernel concepts.
