@@ -1,4 +1,14 @@
+using SemanticKernel.ChatBot.Api.Models;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Add configuration
+builder.Services.Configure<OpenAIConfiguration>(
+    builder.Configuration.GetSection(OpenAIConfiguration.SectionName));
+builder.Services.Configure<SemanticKernelConfiguration>(
+    builder.Configuration.GetSection(SemanticKernelConfiguration.SectionName));
+builder.Services.Configure<DatabaseConfiguration>(
+    builder.Configuration.GetSection(DatabaseConfiguration.SectionName));
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
