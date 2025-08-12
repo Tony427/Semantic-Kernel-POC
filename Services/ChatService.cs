@@ -1,0 +1,145 @@
+using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using SemanticKernel.ChatBot.Api.Models;
+using SemanticKernel.ChatBot.Api.Services;
+
+namespace SemanticKernelPOC.Services;
+
+public class ChatService : IChatService
+{
+    private readonly IChatHistoryService _chatHistoryService;
+    private readonly IKernelMemoryService _memoryService;
+    private readonly ILogger<ChatService> _logger;
+    private readonly Kernel _kernel;
+    private readonly IChatCompletionService _chatCompletionService;
+    private readonly OpenAIConfiguration _openAIConfig;
+
+    public ChatService(
+        IChatHistoryService chatHistoryService,
+        IKernelMemoryService memoryService,
+        ILogger<ChatService> logger,
+        IOptions<OpenAIConfiguration> openAIConfig)
+    {
+        _chatHistoryService = chatHistoryService;
+        _memoryService = memoryService;
+        _logger = logger;
+        _openAIConfig = openAIConfig.Value;
+
+        // Initialize Semantic Kernel
+        var kernelBuilder = Kernel.CreateBuilder();
+        kernelBuilder.AddOpenAIChatCompletion(
+            modelId: _openAIConfig.Model,
+            apiKey: _openAIConfig.ApiKey);
+
+        _kernel = kernelBuilder.Build();
+        _chatCompletionService = _kernel.GetRequiredService<IChatCompletionService>();
+
+        _logger.LogInformation("ChatService initialized with model: {Model}", _openAIConfig.Model);
+    }
+
+    public async Task<string> GetAIResponseAsync(int sessionId, string userMessage, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Processing AI response for session {SessionId}", sessionId);
+
+            // Store user message
+            await _chatHistoryService.AddMessageAsync(sessionId, userMessage, "user");
+
+            // Search for relevant context from documents
+            var relevantContext = await SearchRelevantContextAsync(userMessage, cancellationToken);
+
+            // Build prompt with context
+            var chatHistory = new ChatHistory();
+            
+            // Add system message with context if available
+            if (!string.IsNullOrEmpty(relevantContext))
+            {
+                chatHistory.AddSystemMessage($"You are a helpful AI assistant. Use the following context to inform your responses when relevant:\n\n{relevantContext}");
+            }
+            else
+            {
+                chatHistory.AddSystemMessage("You are a helpful AI assistant.");
+            }
+
+            // Add recent conversation history for context
+            var recentMessages = await _chatHistoryService.GetRecentMessagesAsync(sessionId, 10);
+            foreach (var message in recentMessages.OrderBy(m => m.CreatedAt))
+            {
+                if (message.Role == "user")
+                {
+                    chatHistory.AddUserMessage(message.Content);
+                }
+                else if (message.Role == "assistant")
+                {
+                    chatHistory.AddAssistantMessage(message.Content);
+                }
+            }
+
+            // Add current user message
+            chatHistory.AddUserMessage(userMessage);
+
+            // Get AI response
+            var openAISettings = new OpenAIPromptExecutionSettings
+            {
+                MaxTokens = _openAIConfig.MaxTokens,
+                Temperature = 0.7
+            };
+
+            var response = await _chatCompletionService.GetChatMessageContentAsync(
+                chatHistory,
+                executionSettings: openAISettings,
+                cancellationToken: cancellationToken);
+
+            var aiResponse = response.Content ?? "I apologize, but I couldn't generate a response at this time.";
+
+            // Store AI response
+            await _chatHistoryService.AddMessageAsync(sessionId, aiResponse, "assistant");
+
+            _logger.LogInformation("AI response generated successfully for session {SessionId}", sessionId);
+            return aiResponse;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating AI response for session {SessionId}", sessionId);
+            throw;
+        }
+    }
+
+    private async Task<string> SearchRelevantContextAsync(string userMessage, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var searchResults = await _memoryService.SearchAsync(userMessage, cancellationToken);
+            
+            if (searchResults.Any())
+            {
+                var relevantResults = searchResults
+                    .Where(r => r.Relevance >= 0.7) // Only include highly relevant results
+                    .Take(3) // Limit to top 3 results
+                    .ToList();
+
+                if (relevantResults.Any())
+                {
+                    var contextBuilder = new System.Text.StringBuilder();
+                    contextBuilder.AppendLine("Relevant information from documents:");
+                    
+                    foreach (var result in relevantResults)
+                    {
+                        contextBuilder.AppendLine($"- {result.Content} (Source: {result.DocumentId})");
+                    }
+                    
+                    return contextBuilder.ToString();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching for relevant context, proceeding without context");
+        }
+
+        return string.Empty;
+    }
+}
