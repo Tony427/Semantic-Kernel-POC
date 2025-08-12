@@ -45,9 +45,6 @@ public class ChatService : IChatService
         {
             _logger.LogInformation("Processing AI response for session {SessionId}", sessionId);
 
-            // Store user message
-            await _chatHistoryService.AddMessageAsync(sessionId, "user", userMessage);
-
             // Search for relevant context from documents
             var relevantContext = await SearchRelevantContextAsync(userMessage, cancellationToken);
 
@@ -64,7 +61,7 @@ public class ChatService : IChatService
                 chatHistory.AddSystemMessage("You are a helpful AI assistant.");
             }
 
-            // Add recent conversation history for context
+            // Add recent conversation history for context (excluding current message)
             var recentMessages = await _chatHistoryService.GetMessagesAsync(sessionId, 10);
             foreach (var message in recentMessages.OrderBy(m => m.Timestamp))
             {
@@ -95,7 +92,8 @@ public class ChatService : IChatService
 
             var aiResponse = response.Content ?? "I apologize, but I couldn't generate a response at this time.";
 
-            // Store AI response
+            // Store user message and AI response after successful generation
+            await _chatHistoryService.AddMessageAsync(sessionId, "user", userMessage);
             await _chatHistoryService.AddMessageAsync(sessionId, "assistant", aiResponse);
 
             _logger.LogInformation("AI response generated successfully for session {SessionId}", sessionId);
