@@ -4,5 +4,5 @@ namespace SemanticKernel.ChatBot.Api.Services;
 
 public interface IChatService
 {
-    Task<string> GetAIResponseAsync(int sessionId, string userMessage, CancellationToken cancellationToken = default);
+    Task<string> GetAIResponseAsync(string sessionId, string userMessage, CancellationToken cancellationToken = default);
 }

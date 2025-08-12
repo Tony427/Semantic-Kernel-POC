@@ -39,14 +39,14 @@ public class ChatService : IChatService
         _logger.LogInformation("ChatService initialized with model: {Model}", _openAIConfig.Model);
     }
 
-    public async Task<string> GetAIResponseAsync(int sessionId, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<string> GetAIResponseAsync(string sessionId, string userMessage, CancellationToken cancellationToken = default)
     {
         try
         {
             _logger.LogInformation("Processing AI response for session {SessionId}", sessionId);
 
             // Store user message
-            await _chatHistoryService.AddMessageAsync(sessionId, userMessage, "user");
+            await _chatHistoryService.AddMessageAsync(sessionId, "user", userMessage);
 
             // Search for relevant context from documents
             var relevantContext = await SearchRelevantContextAsync(userMessage, cancellationToken);
@@ -65,8 +65,8 @@ public class ChatService : IChatService
             }
 
             // Add recent conversation history for context
-            var recentMessages = await _chatHistoryService.GetRecentMessagesAsync(sessionId, 10);
-            foreach (var message in recentMessages.OrderBy(m => m.CreatedAt))
+            var recentMessages = await _chatHistoryService.GetMessagesAsync(sessionId, 10);
+            foreach (var message in recentMessages.OrderBy(m => m.Timestamp))
             {
                 if (message.Role == "user")
                 {
@@ -96,7 +96,7 @@ public class ChatService : IChatService
             var aiResponse = response.Content ?? "I apologize, but I couldn't generate a response at this time.";
 
             // Store AI response
-            await _chatHistoryService.AddMessageAsync(sessionId, aiResponse, "assistant");
+            await _chatHistoryService.AddMessageAsync(sessionId, "assistant", aiResponse);
 
             _logger.LogInformation("AI response generated successfully for session {SessionId}", sessionId);
             return aiResponse;
@@ -112,27 +112,11 @@ public class ChatService : IChatService
     {
         try
         {
-            var searchResults = await _memoryService.SearchAsync(userMessage, cancellationToken);
+            var searchResult = await _memoryService.SearchAsync(userMessage, 3);
             
-            if (searchResults.Any())
+            if (!string.IsNullOrEmpty(searchResult))
             {
-                var relevantResults = searchResults
-                    .Where(r => r.Relevance >= 0.7) // Only include highly relevant results
-                    .Take(3) // Limit to top 3 results
-                    .ToList();
-
-                if (relevantResults.Any())
-                {
-                    var contextBuilder = new System.Text.StringBuilder();
-                    contextBuilder.AppendLine("Relevant information from documents:");
-                    
-                    foreach (var result in relevantResults)
-                    {
-                        contextBuilder.AppendLine($"- {result.Content} (Source: {result.DocumentId})");
-                    }
-                    
-                    return contextBuilder.ToString();
-                }
+                return $"Relevant information from documents:\n{searchResult}";
             }
         }
         catch (Exception ex)

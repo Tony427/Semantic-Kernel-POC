@@ -22,7 +22,7 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId}/ask")]
-    public async Task<IActionResult> AskQuestion(int sessionId, [FromBody] ChatRequest request)
+    public async Task<IActionResult> AskQuestion(string sessionId, [FromBody] ChatRequest request)
     {
         try
         {
@@ -60,7 +60,7 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId}/chat")]
-    public async Task<IActionResult> Chat(int sessionId, [FromBody] ChatRequest request)
+    public async Task<IActionResult> Chat(string sessionId, [FromBody] ChatRequest request)
     {
         // Alias for AskQuestion to match the documented API endpoint
         return await AskQuestion(sessionId, request);
@@ -75,6 +75,6 @@ public class ChatRequest
 public class ChatResponse
 {
     public string Message { get; set; } = string.Empty;
-    public int SessionId { get; set; }
+    public string SessionId { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
 }
