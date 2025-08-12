@@ -358,3 +358,8 @@ appsettings.Local.json
 
 # Claude Code settings
 .claude/
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
