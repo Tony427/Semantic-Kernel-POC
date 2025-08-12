@@ -14,7 +14,7 @@ builder.Services.Configure<DatabaseConfiguration>(
     builder.Configuration.GetSection(DatabaseConfiguration.SectionName));
 
 // Add Entity Framework
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? builder.Configuration.GetSection("Database:ConnectionString").Value
     ?? "Data Source=chatbot.db";
 
@@ -35,9 +35,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo 
-    { 
-        Title = "Semantic Kernel Chat Bot API", 
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Semantic Kernel Chat Bot API",
         Version = "v1",
         Description = "API for chat bot powered by Semantic Kernel with persistent chat history and document memory"
     });
