@@ -53,6 +53,27 @@ using (var scope = app.Services.CreateScope())
     context.Database.EnsureCreated();
 }
 
+// Initialize Kernel Memory with documents on startup
+try
+{
+    using var scope = app.Services.CreateScope();
+    var kernelMemoryService = scope.ServiceProvider.GetRequiredService<IKernelMemoryService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    logger.LogInformation("Starting Kernel Memory initialization...");
+    await kernelMemoryService.InitializeAsync();
+    await kernelMemoryService.LoadDocumentsAsync();
+    
+    var documentCount = await kernelMemoryService.GetDocumentCountAsync();
+    logger.LogInformation("Kernel Memory initialized successfully with {DocumentCount} documents", documentCount);
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "Failed to initialize Kernel Memory on startup. The service will still start but document search may not work properly.");
+    // Don't prevent app startup if Kernel Memory fails
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
