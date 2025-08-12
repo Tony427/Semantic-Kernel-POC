@@ -177,18 +177,28 @@ public class KernelMemoryService : IKernelMemoryService
             var searchResult = await _memory.SearchAsync(
                 query: query,
                 limit: limit,
-                minRelevance: 0.7);
+                minRelevance: 0.3);
+
+            _logger.LogInformation("Search completed for query: {Query}. Found {ResultCount} results", query, searchResult.Results.Count());
 
             if (!searchResult.Results.Any())
             {
-                _logger.LogDebug("No relevant documents found for query: {Query}", query);
+                _logger.LogWarning("No relevant documents found for query: {Query} with minRelevance: 0.3", query);
                 return "No relevant information found in the knowledge base.";
+            }
+
+            // Log each result with relevance score
+            foreach (var result in searchResult.Results)
+            {
+                var relevanceScore = result.Partitions.FirstOrDefault()?.Relevance ?? 0;
+                _logger.LogInformation("Found result from source: {SourceName}, Relevance: {Relevance:F3}", 
+                    result.SourceName ?? "Unknown", relevanceScore);
             }
 
             var context = string.Join("\n\n", searchResult.Results.Select(result => 
                 $"[Source: {result.SourceName ?? "Unknown"}]\n{result.Partitions.FirstOrDefault()?.Text ?? "No content"}"));
 
-            _logger.LogDebug("Found {ResultCount} relevant documents for query: {Query}", searchResult.Results.Count(), query);
+            _logger.LogInformation("Successfully found {ResultCount} relevant documents for query: {Query}", searchResult.Results.Count(), query);
             
             return context;
         }
