@@ -5,7 +5,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using SemanticKernel.ChatBot.Api.Models;
 using SemanticKernel.ChatBot.Api.Services;
 
-namespace SemanticKernelPOC.Services;
+namespace SemanticKernel.ChatBot.Api.Services;
 
 public class ChatService : IChatService
 {

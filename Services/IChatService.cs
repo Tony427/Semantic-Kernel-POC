@@ -1,6 +1,6 @@
-using SemanticKernelPOC.Models;
+using SemanticKernel.ChatBot.Api.Models;
 
-namespace SemanticKernelPOC.Services;
+namespace SemanticKernel.ChatBot.Api.Services;
 
 public interface IChatService
 {
