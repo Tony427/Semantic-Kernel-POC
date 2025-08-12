@@ -143,7 +143,7 @@ public class KernelMemoryService : IKernelMemoryService
                                 { "filename", fileName },
                                 { "extension", extension },
                                 { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
-                                { "fileSize", new FileInfo(filePath).Length.ToString() }
+                                { "fileSize", new System.IO.FileInfo(filePath).Length.ToString() }
                             });
 
                         loadedCount++;
@@ -285,7 +285,7 @@ public class KernelMemoryService : IKernelMemoryService
                                 { "filename", fileName },
                                 { "extension", extension },
                                 { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
-                                { "fileSize", new FileInfo(filePath).Length.ToString() },
+                                { "fileSize", new System.IO.FileInfo(filePath).Length.ToString() },
                                 { "reloadedAt", DateTime.UtcNow.ToString("O") }
                             });
 

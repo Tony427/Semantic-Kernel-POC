@@ -20,7 +20,7 @@ public class DocumentStatistics
     public DateTime LastModified { get; set; }
 }
 
-public class FileInfo
+public class DocumentFileInfo
 {
     public string FileName { get; set; } = string.Empty;
     public string Extension { get; set; } = string.Empty;
