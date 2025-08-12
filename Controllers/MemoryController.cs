@@ -101,4 +101,75 @@ public class MemoryController : ControllerBase
             return StatusCode(500, new { error = "Failed to get Kernel Memory status" });
         }
     }
+
+    [HttpPost("reload")]
+    public async Task<IActionResult> ReloadDocuments()
+    {
+        try
+        {
+            _logger.LogInformation("Memory reload requested");
+            var result = await _memoryService.ReloadDocumentsAsync();
+            
+            var response = new
+            {
+                success = result.Success,
+                message = result.Message,
+                totalDocuments = result.TotalDocuments,
+                loadedDocuments = result.LoadedDocuments,
+                failedDocuments = result.FailedDocuments,
+                statistics = new
+                {
+                    totalFiles = result.Statistics.TotalFiles,
+                    filesByExtension = result.Statistics.FilesByExtension,
+                    totalSizeBytes = result.Statistics.TotalSizeBytes,
+                    totalSizeMB = Math.Round(result.Statistics.TotalSizeBytes / (1024.0 * 1024.0), 2),
+                    lastModified = result.Statistics.LastModified
+                },
+                errors = result.Errors,
+                loadedAt = result.LoadedAt
+            };
+
+            if (result.Success)
+            {
+                return Ok(response);
+            }
+            else
+            {
+                return BadRequest(response);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reload documents");
+            return StatusCode(500, new { 
+                success = false,
+                error = "Failed to reload documents",
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpGet("statistics")]
+    public async Task<IActionResult> GetStatistics()
+    {
+        try
+        {
+            var statistics = await _memoryService.GetDocumentStatisticsAsync();
+            
+            return Ok(new
+            {
+                totalFiles = statistics.TotalFiles,
+                filesByExtension = statistics.FilesByExtension,
+                totalSizeBytes = statistics.TotalSizeBytes,
+                totalSizeMB = Math.Round(statistics.TotalSizeBytes / (1024.0 * 1024.0), 2),
+                lastModified = statistics.LastModified,
+                message = "Document statistics retrieved successfully"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get document statistics");
+            return StatusCode(500, new { error = "Failed to get document statistics" });
+        }
+    }
 }

@@ -8,7 +8,6 @@ namespace SemanticKernel.ChatBot.Api.Services;
 public class KernelMemoryService : IKernelMemoryService
 {
     private readonly IKernelMemory _memory;
-    private readonly IFileReaderService _fileReaderService;
     private readonly OpenAIConfiguration _openAIConfig;
     private readonly SemanticKernelConfiguration _skConfig;
     private readonly ILogger<KernelMemoryService> _logger;
@@ -16,17 +15,15 @@ public class KernelMemoryService : IKernelMemoryService
     private readonly object _initLock = new();
 
     public KernelMemoryService(
-        IFileReaderService fileReaderService,
         IOptions<OpenAIConfiguration> openAIConfig,
         IOptions<SemanticKernelConfiguration> skConfig,
         ILogger<KernelMemoryService> logger)
     {
-        _fileReaderService = fileReaderService;
         _openAIConfig = openAIConfig.Value;
         _skConfig = skConfig.Value;
         _logger = logger;
 
-        // Initialize Kernel Memory with OpenAI
+        // Initialize Kernel Memory with OpenAI and configurable vector database
         var memoryConfig = new Microsoft.KernelMemory.OpenAIConfig
         {
             APIKey = _openAIConfig.ApiKey,
@@ -34,10 +31,51 @@ public class KernelMemoryService : IKernelMemoryService
             EmbeddingModel = "text-embedding-3-small"
         };
 
-        _memory = new KernelMemoryBuilder()
-            .WithOpenAI(memoryConfig)
-            .WithSimpleVectorDb()
-            .Build<MemoryServerless>();
+        _memory = BuildKernelMemory(memoryConfig);
+    }
+
+    private IKernelMemory BuildKernelMemory(Microsoft.KernelMemory.OpenAIConfig openAIConfig)
+    {
+        var builder = new KernelMemoryBuilder()
+            .WithOpenAI(openAIConfig);
+
+        // Configure vector database based on settings
+        // Note: Currently only SimpleVectorDb is available with current packages
+        // Additional vector databases require specific NuGet packages
+        switch (_skConfig.VectorDb.Type)
+        {
+            case VectorDbType.SimpleVectorDb:
+                _logger.LogInformation("Using SimpleVectorDb for vector storage (local, file-based)");
+                builder.WithSimpleVectorDb();
+                break;
+
+            case VectorDbType.AzureCognitiveSearch:
+                _logger.LogWarning("Azure Cognitive Search requires Microsoft.KernelMemory.AI.AzureCognitiveSearch package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
+                break;
+
+            case VectorDbType.Pinecone:
+                _logger.LogWarning("Pinecone requires Microsoft.KernelMemory.AI.Pinecone package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
+                break;
+
+            case VectorDbType.Qdrant:
+                _logger.LogWarning("Qdrant requires Microsoft.KernelMemory.AI.Qdrant package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
+                break;
+
+            case VectorDbType.Redis:
+                _logger.LogWarning("Redis requires Microsoft.KernelMemory.AI.Redis package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
+                break;
+
+            default:
+                _logger.LogWarning("Unknown vector database type: {VectorDbType}, using SimpleVectorDb", _skConfig.VectorDb.Type);
+                builder.WithSimpleVectorDb();
+                break;
+        }
+
+        return builder.Build<MemoryServerless>();
     }
 
     public async Task InitializeAsync()
@@ -72,37 +110,54 @@ public class KernelMemoryService : IKernelMemoryService
         {
             _logger.LogInformation("Loading documents into Kernel Memory...");
             
-            var documents = await _fileReaderService.GetAllDocumentsAsync();
+            // Check if documents directory exists
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                _logger.LogWarning("Documents directory does not exist: {DocumentsPath}", _skConfig.DocumentsPath);
+                return;
+            }
+
+            // Supported file extensions for Kernel Memory
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
             var loadedCount = 0;
 
-            foreach (var document in documents)
+            foreach (var extension in supportedExtensions)
             {
-                try
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                foreach (var filePath in files)
                 {
-                    // Use filename without extension as document ID
-                    var documentId = Path.GetFileNameWithoutExtension(document.FileName);
-                    
-                    // Import document into memory
-                    await _memory.ImportTextAsync(
-                        text: document.Content,
-                        documentId: documentId,
-                        tags: new TagCollection 
-                        { 
-                            { "filename", document.FileName },
-                            { "lastModified", document.LastModified.ToString("O") },
-                            { "fileSize", document.FileSizeBytes.ToString() }
-                        });
+                    try
+                    {
+                        var fileName = Path.GetFileName(filePath);
+                        var documentId = Path.GetFileNameWithoutExtension(fileName);
+                        
+                        _logger.LogDebug("Loading document: {FileName} (Type: {Extension})", fileName, extension);
 
-                    loadedCount++;
-                    _logger.LogDebug("Loaded document: {DocumentId} ({FileName})", documentId, document.FileName);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to load document: {FileName}", document.FileName);
+                        // Use Kernel Memory's native document import
+                        await _memory.ImportDocumentAsync(
+                            filePath: filePath,
+                            documentId: documentId,
+                            tags: new TagCollection 
+                            { 
+                                { "filename", fileName },
+                                { "extension", extension },
+                                { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
+                                { "fileSize", new System.IO.FileInfo(filePath).Length.ToString() }
+                            });
+
+                        loadedCount++;
+                        _logger.LogDebug("Successfully loaded document: {DocumentId} ({FileName})", documentId, fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to load document: {FilePath}", filePath);
+                    }
                 }
             }
 
-            _logger.LogInformation("Successfully loaded {LoadedCount} documents into Kernel Memory", loadedCount);
+            _logger.LogInformation("Successfully loaded {LoadedCount} documents into Kernel Memory from {DocumentsPath}", 
+                loadedCount, _skConfig.DocumentsPath);
         }
         catch (Exception ex)
         {
@@ -155,14 +210,163 @@ public class KernelMemoryService : IKernelMemoryService
         
         try
         {
-            // Since we're using SimpleVectorDb, we can't easily get document count
-            // Return the count from file reader service as approximation
-            return await _fileReaderService.GetDocumentCountAsync();
+            // Count files directly from Documents directory
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                return 0;
+            }
+
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            var totalCount = 0;
+
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                totalCount += files.Length;
+            }
+
+            return totalCount;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get document count from Kernel Memory");
+            _logger.LogError(ex, "Failed to get document count from Documents directory");
             return 0;
+        }
+    }
+
+    public async Task<DocumentLoadResult> ReloadDocumentsAsync()
+    {
+        var result = new DocumentLoadResult();
+        
+        try
+        {
+            await InitializeAsync();
+
+            _logger.LogInformation("Starting document reload...");
+            
+            // Check if documents directory exists
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                result.Success = false;
+                result.Message = $"Documents directory does not exist: {_skConfig.DocumentsPath}";
+                result.Errors.Add(result.Message);
+                return result;
+            }
+
+            // Supported file extensions for Kernel Memory
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            
+            // Get statistics first
+            result.Statistics = await GetDocumentStatisticsAsync();
+            result.TotalDocuments = result.Statistics.TotalFiles;
+
+            var loadedCount = 0;
+            var failedCount = 0;
+
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                foreach (var filePath in files)
+                {
+                    try
+                    {
+                        var fileName = Path.GetFileName(filePath);
+                        var documentId = Path.GetFileNameWithoutExtension(fileName);
+                        
+                        _logger.LogDebug("Reloading document: {FileName} (Type: {Extension})", fileName, extension);
+
+                        // Use Kernel Memory's native document import
+                        await _memory.ImportDocumentAsync(
+                            filePath: filePath,
+                            documentId: documentId,
+                            tags: new TagCollection 
+                            { 
+                                { "filename", fileName },
+                                { "extension", extension },
+                                { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
+                                { "fileSize", new System.IO.FileInfo(filePath).Length.ToString() },
+                                { "reloadedAt", DateTime.UtcNow.ToString("O") }
+                            });
+
+                        loadedCount++;
+                        _logger.LogDebug("Successfully reloaded document: {DocumentId} ({FileName})", documentId, fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        var error = $"Failed to reload document: {filePath} - {ex.Message}";
+                        result.Errors.Add(error);
+                        _logger.LogError(ex, "Failed to reload document: {FilePath}", filePath);
+                    }
+                }
+            }
+
+            result.LoadedDocuments = loadedCount;
+            result.FailedDocuments = failedCount;
+            result.Success = failedCount == 0;
+            result.Message = result.Success 
+                ? $"Successfully reloaded all {loadedCount} documents" 
+                : $"Reloaded {loadedCount} documents with {failedCount} failures";
+
+            _logger.LogInformation("Document reload completed: {LoadedCount} loaded, {FailedCount} failed", 
+                loadedCount, failedCount);
+                
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.Message = "Failed to reload documents";
+            result.Errors.Add(ex.Message);
+            _logger.LogError(ex, "Failed to reload documents");
+            return result;
+        }
+    }
+
+    public async Task<DocumentStatistics> GetDocumentStatisticsAsync()
+    {
+        await InitializeAsync();
+        
+        var statistics = new DocumentStatistics();
+
+        try
+        {
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                return statistics;
+            }
+
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                if (files.Length > 0)
+                {
+                    statistics.FilesByExtension[extension] = files.Length;
+                    statistics.TotalFiles += files.Length;
+
+                    foreach (var filePath in files)
+                    {
+                        var fileInfo = new System.IO.FileInfo(filePath);
+                        statistics.TotalSizeBytes += fileInfo.Length;
+                        
+                        if (fileInfo.LastWriteTime > statistics.LastModified)
+                        {
+                            statistics.LastModified = fileInfo.LastWriteTime;
+                        }
+                    }
+                }
+            }
+
+            return statistics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get document statistics");
+            return statistics;
         }
     }
 }
