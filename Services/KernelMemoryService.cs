@@ -8,7 +8,6 @@ namespace SemanticKernel.ChatBot.Api.Services;
 public class KernelMemoryService : IKernelMemoryService
 {
     private readonly IKernelMemory _memory;
-    private readonly IFileReaderService _fileReaderService;
     private readonly OpenAIConfiguration _openAIConfig;
     private readonly SemanticKernelConfiguration _skConfig;
     private readonly ILogger<KernelMemoryService> _logger;
@@ -16,12 +15,10 @@ public class KernelMemoryService : IKernelMemoryService
     private readonly object _initLock = new();
 
     public KernelMemoryService(
-        IFileReaderService fileReaderService,
         IOptions<OpenAIConfiguration> openAIConfig,
         IOptions<SemanticKernelConfiguration> skConfig,
         ILogger<KernelMemoryService> logger)
     {
-        _fileReaderService = fileReaderService;
         _openAIConfig = openAIConfig.Value;
         _skConfig = skConfig.Value;
         _logger = logger;
@@ -72,37 +69,54 @@ public class KernelMemoryService : IKernelMemoryService
         {
             _logger.LogInformation("Loading documents into Kernel Memory...");
             
-            var documents = await _fileReaderService.GetAllDocumentsAsync();
+            // Check if documents directory exists
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                _logger.LogWarning("Documents directory does not exist: {DocumentsPath}", _skConfig.DocumentsPath);
+                return;
+            }
+
+            // Supported file extensions for Kernel Memory
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
             var loadedCount = 0;
 
-            foreach (var document in documents)
+            foreach (var extension in supportedExtensions)
             {
-                try
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                foreach (var filePath in files)
                 {
-                    // Use filename without extension as document ID
-                    var documentId = Path.GetFileNameWithoutExtension(document.FileName);
-                    
-                    // Import document into memory
-                    await _memory.ImportTextAsync(
-                        text: document.Content,
-                        documentId: documentId,
-                        tags: new TagCollection 
-                        { 
-                            { "filename", document.FileName },
-                            { "lastModified", document.LastModified.ToString("O") },
-                            { "fileSize", document.FileSizeBytes.ToString() }
-                        });
+                    try
+                    {
+                        var fileName = Path.GetFileName(filePath);
+                        var documentId = Path.GetFileNameWithoutExtension(fileName);
+                        
+                        _logger.LogDebug("Loading document: {FileName} (Type: {Extension})", fileName, extension);
 
-                    loadedCount++;
-                    _logger.LogDebug("Loaded document: {DocumentId} ({FileName})", documentId, document.FileName);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to load document: {FileName}", document.FileName);
+                        // Use Kernel Memory's native document import
+                        await _memory.ImportDocumentAsync(
+                            filePath: filePath,
+                            documentId: documentId,
+                            tags: new TagCollection 
+                            { 
+                                { "filename", fileName },
+                                { "extension", extension },
+                                { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
+                                { "fileSize", new FileInfo(filePath).Length.ToString() }
+                            });
+
+                        loadedCount++;
+                        _logger.LogDebug("Successfully loaded document: {DocumentId} ({FileName})", documentId, fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to load document: {FilePath}", filePath);
+                    }
                 }
             }
 
-            _logger.LogInformation("Successfully loaded {LoadedCount} documents into Kernel Memory", loadedCount);
+            _logger.LogInformation("Successfully loaded {LoadedCount} documents into Kernel Memory from {DocumentsPath}", 
+                loadedCount, _skConfig.DocumentsPath);
         }
         catch (Exception ex)
         {
@@ -155,13 +169,26 @@ public class KernelMemoryService : IKernelMemoryService
         
         try
         {
-            // Since we're using SimpleVectorDb, we can't easily get document count
-            // Return the count from file reader service as approximation
-            return await _fileReaderService.GetDocumentCountAsync();
+            // Count files directly from Documents directory
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                return 0;
+            }
+
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            var totalCount = 0;
+
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                totalCount += files.Length;
+            }
+
+            return totalCount;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get document count from Kernel Memory");
+            _logger.LogError(ex, "Failed to get document count from Documents directory");
             return 0;
         }
     }
