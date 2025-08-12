@@ -233,4 +233,140 @@ public class KernelMemoryService : IKernelMemoryService
             return 0;
         }
     }
+
+    public async Task<DocumentLoadResult> ReloadDocumentsAsync()
+    {
+        var result = new DocumentLoadResult();
+        
+        try
+        {
+            await InitializeAsync();
+
+            _logger.LogInformation("Starting document reload...");
+            
+            // Check if documents directory exists
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                result.Success = false;
+                result.Message = $"Documents directory does not exist: {_skConfig.DocumentsPath}";
+                result.Errors.Add(result.Message);
+                return result;
+            }
+
+            // Supported file extensions for Kernel Memory
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            
+            // Get statistics first
+            result.Statistics = await GetDocumentStatisticsAsync();
+            result.TotalDocuments = result.Statistics.TotalFiles;
+
+            var loadedCount = 0;
+            var failedCount = 0;
+
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                foreach (var filePath in files)
+                {
+                    try
+                    {
+                        var fileName = Path.GetFileName(filePath);
+                        var documentId = Path.GetFileNameWithoutExtension(fileName);
+                        
+                        _logger.LogDebug("Reloading document: {FileName} (Type: {Extension})", fileName, extension);
+
+                        // Use Kernel Memory's native document import
+                        await _memory.ImportDocumentAsync(
+                            filePath: filePath,
+                            documentId: documentId,
+                            tags: new TagCollection 
+                            { 
+                                { "filename", fileName },
+                                { "extension", extension },
+                                { "lastModified", File.GetLastWriteTime(filePath).ToString("O") },
+                                { "fileSize", new FileInfo(filePath).Length.ToString() },
+                                { "reloadedAt", DateTime.UtcNow.ToString("O") }
+                            });
+
+                        loadedCount++;
+                        _logger.LogDebug("Successfully reloaded document: {DocumentId} ({FileName})", documentId, fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        var error = $"Failed to reload document: {filePath} - {ex.Message}";
+                        result.Errors.Add(error);
+                        _logger.LogError(ex, "Failed to reload document: {FilePath}", filePath);
+                    }
+                }
+            }
+
+            result.LoadedDocuments = loadedCount;
+            result.FailedDocuments = failedCount;
+            result.Success = failedCount == 0;
+            result.Message = result.Success 
+                ? $"Successfully reloaded all {loadedCount} documents" 
+                : $"Reloaded {loadedCount} documents with {failedCount} failures";
+
+            _logger.LogInformation("Document reload completed: {LoadedCount} loaded, {FailedCount} failed", 
+                loadedCount, failedCount);
+                
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.Message = "Failed to reload documents";
+            result.Errors.Add(ex.Message);
+            _logger.LogError(ex, "Failed to reload documents");
+            return result;
+        }
+    }
+
+    public async Task<DocumentStatistics> GetDocumentStatisticsAsync()
+    {
+        await InitializeAsync();
+        
+        var statistics = new DocumentStatistics();
+
+        try
+        {
+            if (!Directory.Exists(_skConfig.DocumentsPath))
+            {
+                return statistics;
+            }
+
+            var supportedExtensions = new[] { ".txt", ".docx", ".pdf", ".md", ".html", ".htm" };
+            
+            foreach (var extension in supportedExtensions)
+            {
+                var files = Directory.GetFiles(_skConfig.DocumentsPath, $"*{extension}", SearchOption.AllDirectories);
+                
+                if (files.Length > 0)
+                {
+                    statistics.FilesByExtension[extension] = files.Length;
+                    statistics.TotalFiles += files.Length;
+
+                    foreach (var filePath in files)
+                    {
+                        var fileInfo = new System.IO.FileInfo(filePath);
+                        statistics.TotalSizeBytes += fileInfo.Length;
+                        
+                        if (fileInfo.LastWriteTime > statistics.LastModified)
+                        {
+                            statistics.LastModified = fileInfo.LastWriteTime;
+                        }
+                    }
+                }
+            }
+
+            return statistics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get document statistics");
+            return statistics;
+        }
+    }
 }
