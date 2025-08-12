@@ -40,67 +40,33 @@ public class KernelMemoryService : IKernelMemoryService
             .WithOpenAI(openAIConfig);
 
         // Configure vector database based on settings
+        // Note: Currently only SimpleVectorDb is available with current packages
+        // Additional vector databases require specific NuGet packages
         switch (_skConfig.VectorDb.Type)
         {
             case VectorDbType.SimpleVectorDb:
-                _logger.LogInformation("Using SimpleVectorDb for vector storage");
+                _logger.LogInformation("Using SimpleVectorDb for vector storage (local, file-based)");
                 builder.WithSimpleVectorDb();
                 break;
 
             case VectorDbType.AzureCognitiveSearch:
-                if (_skConfig.VectorDb.AzureCognitiveSearch != null)
-                {
-                    _logger.LogInformation("Using Azure Cognitive Search for vector storage");
-                    builder.WithAzureCognitiveSearch(
-                        _skConfig.VectorDb.AzureCognitiveSearch.Endpoint ?? throw new InvalidOperationException("Azure Cognitive Search endpoint is required"),
-                        _skConfig.VectorDb.AzureCognitiveSearch.ApiKey ?? throw new InvalidOperationException("Azure Cognitive Search API key is required"));
-                }
-                else
-                {
-                    _logger.LogWarning("Azure Cognitive Search configuration is missing, falling back to SimpleVectorDb");
-                    builder.WithSimpleVectorDb();
-                }
+                _logger.LogWarning("Azure Cognitive Search requires Microsoft.KernelMemory.AI.AzureCognitiveSearch package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
                 break;
 
             case VectorDbType.Pinecone:
-                if (_skConfig.VectorDb.Pinecone != null)
-                {
-                    _logger.LogInformation("Using Pinecone for vector storage");
-                    builder.WithPinecone(
-                        _skConfig.VectorDb.Pinecone.ApiKey ?? throw new InvalidOperationException("Pinecone API key is required"),
-                        _skConfig.VectorDb.Pinecone.Environment ?? throw new InvalidOperationException("Pinecone environment is required"));
-                }
-                else
-                {
-                    _logger.LogWarning("Pinecone configuration is missing, falling back to SimpleVectorDb");
-                    builder.WithSimpleVectorDb();
-                }
+                _logger.LogWarning("Pinecone requires Microsoft.KernelMemory.AI.Pinecone package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
                 break;
 
             case VectorDbType.Qdrant:
-                if (!string.IsNullOrEmpty(_skConfig.VectorDb.ConnectionString))
-                {
-                    _logger.LogInformation("Using Qdrant for vector storage");
-                    builder.WithQdrant(_skConfig.VectorDb.ConnectionString);
-                }
-                else
-                {
-                    _logger.LogWarning("Qdrant connection string is missing, falling back to SimpleVectorDb");
-                    builder.WithSimpleVectorDb();
-                }
+                _logger.LogWarning("Qdrant requires Microsoft.KernelMemory.AI.Qdrant package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
                 break;
 
             case VectorDbType.Redis:
-                if (!string.IsNullOrEmpty(_skConfig.VectorDb.ConnectionString))
-                {
-                    _logger.LogInformation("Using Redis for vector storage");
-                    builder.WithRedis(_skConfig.VectorDb.ConnectionString);
-                }
-                else
-                {
-                    _logger.LogWarning("Redis connection string is missing, falling back to SimpleVectorDb");
-                    builder.WithSimpleVectorDb();
-                }
+                _logger.LogWarning("Redis requires Microsoft.KernelMemory.AI.Redis package. Falling back to SimpleVectorDb");
+                builder.WithSimpleVectorDb();
                 break;
 
             default:
