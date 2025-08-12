@@ -23,7 +23,7 @@ public class KernelMemoryService : IKernelMemoryService
         _skConfig = skConfig.Value;
         _logger = logger;
 
-        // Initialize Kernel Memory with OpenAI
+        // Initialize Kernel Memory with OpenAI and configurable vector database
         var memoryConfig = new Microsoft.KernelMemory.OpenAIConfig
         {
             APIKey = _openAIConfig.ApiKey,
@@ -31,10 +31,85 @@ public class KernelMemoryService : IKernelMemoryService
             EmbeddingModel = "text-embedding-3-small"
         };
 
-        _memory = new KernelMemoryBuilder()
-            .WithOpenAI(memoryConfig)
-            .WithSimpleVectorDb()
-            .Build<MemoryServerless>();
+        _memory = BuildKernelMemory(memoryConfig);
+    }
+
+    private IKernelMemory BuildKernelMemory(Microsoft.KernelMemory.OpenAIConfig openAIConfig)
+    {
+        var builder = new KernelMemoryBuilder()
+            .WithOpenAI(openAIConfig);
+
+        // Configure vector database based on settings
+        switch (_skConfig.VectorDb.Type)
+        {
+            case VectorDbType.SimpleVectorDb:
+                _logger.LogInformation("Using SimpleVectorDb for vector storage");
+                builder.WithSimpleVectorDb();
+                break;
+
+            case VectorDbType.AzureCognitiveSearch:
+                if (_skConfig.VectorDb.AzureCognitiveSearch != null)
+                {
+                    _logger.LogInformation("Using Azure Cognitive Search for vector storage");
+                    builder.WithAzureCognitiveSearch(
+                        _skConfig.VectorDb.AzureCognitiveSearch.Endpoint ?? throw new InvalidOperationException("Azure Cognitive Search endpoint is required"),
+                        _skConfig.VectorDb.AzureCognitiveSearch.ApiKey ?? throw new InvalidOperationException("Azure Cognitive Search API key is required"));
+                }
+                else
+                {
+                    _logger.LogWarning("Azure Cognitive Search configuration is missing, falling back to SimpleVectorDb");
+                    builder.WithSimpleVectorDb();
+                }
+                break;
+
+            case VectorDbType.Pinecone:
+                if (_skConfig.VectorDb.Pinecone != null)
+                {
+                    _logger.LogInformation("Using Pinecone for vector storage");
+                    builder.WithPinecone(
+                        _skConfig.VectorDb.Pinecone.ApiKey ?? throw new InvalidOperationException("Pinecone API key is required"),
+                        _skConfig.VectorDb.Pinecone.Environment ?? throw new InvalidOperationException("Pinecone environment is required"));
+                }
+                else
+                {
+                    _logger.LogWarning("Pinecone configuration is missing, falling back to SimpleVectorDb");
+                    builder.WithSimpleVectorDb();
+                }
+                break;
+
+            case VectorDbType.Qdrant:
+                if (!string.IsNullOrEmpty(_skConfig.VectorDb.ConnectionString))
+                {
+                    _logger.LogInformation("Using Qdrant for vector storage");
+                    builder.WithQdrant(_skConfig.VectorDb.ConnectionString);
+                }
+                else
+                {
+                    _logger.LogWarning("Qdrant connection string is missing, falling back to SimpleVectorDb");
+                    builder.WithSimpleVectorDb();
+                }
+                break;
+
+            case VectorDbType.Redis:
+                if (!string.IsNullOrEmpty(_skConfig.VectorDb.ConnectionString))
+                {
+                    _logger.LogInformation("Using Redis for vector storage");
+                    builder.WithRedis(_skConfig.VectorDb.ConnectionString);
+                }
+                else
+                {
+                    _logger.LogWarning("Redis connection string is missing, falling back to SimpleVectorDb");
+                    builder.WithSimpleVectorDb();
+                }
+                break;
+
+            default:
+                _logger.LogWarning("Unknown vector database type: {VectorDbType}, using SimpleVectorDb", _skConfig.VectorDb.Type);
+                builder.WithSimpleVectorDb();
+                break;
+        }
+
+        return builder.Build<MemoryServerless>();
     }
 
     public async Task InitializeAsync()
