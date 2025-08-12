@@ -25,6 +25,7 @@ builder.Services.AddDbContext<ChatBotDbContext>(options =>
 builder.Services.AddScoped<IFileReaderService, FileReaderService>();
 builder.Services.AddScoped<IChatHistoryService, ChatHistoryService>();
 builder.Services.AddScoped<IKernelMemoryService, KernelMemoryService>();
+builder.Services.AddScoped<IChatService, ChatService>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
